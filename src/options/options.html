@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>設定 - gcal-worktime-tracker</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <h1>就業時間帯の設定</h1>
+    <form id="options-form">
+      <div class="form-group">
+        <label for="start">開始時刻</label>
+        <input type="time" id="start" name="start" value="10:00" required>
+      </div>
+      <div class="form-group">
+        <label for="end">終了時刻</label>
+        <input type="time" id="end" name="end" value="19:00" required>
+      </div>
+      <div id="validation-error" class="error-msg" hidden>
+        開始時刻は終了時刻より前に設定してください。
+      </div>
+      <button type="submit" class="save-btn">保存</button>
+      <div id="status-msg" class="status-msg" hidden></div>
+    </form>
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>
