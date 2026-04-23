@@ -100,6 +100,8 @@ function buildBusyIntervals(events, workStart, workEnd) {
     const isLunch = title.includes(LUNCH_KEYWORD);
     // lunch は transparent でも差し引く（休憩扱い）
     if (ev.transparency === "transparent" && !isLunch) continue;
+    // 「参加」していない会議は差し引かない（lunch は参加判定をスキップ）
+    if (!isLunch && !isSelfAccepted(ev)) continue;
 
     const evStart = new Date(ev.start.dateTime);
     const evEnd = new Date(ev.end.dateTime);
@@ -112,6 +114,17 @@ function buildBusyIntervals(events, workStart, workEnd) {
     }
   }
   return intervals;
+}
+
+/**
+ * 自分が「参加」(accepted) しているイベントか判定する。
+ * attendees がない（自分だけの予定）場合は参加とみなす。
+ */
+function isSelfAccepted(ev) {
+  if (!ev.attendees || ev.attendees.length === 0) return true;
+  const self = ev.attendees.find((a) => a.self === true);
+  if (!self) return true;
+  return self.responseStatus === "accepted";
 }
 
 /**
@@ -128,6 +141,8 @@ function isAllDayEvent(ev) {
 export function hasNonExtensionAllDayEvent(events) {
   return events.some((ev) => {
     if (!isAllDayEvent(ev)) return false;
+    if (ev.transparency === "transparent") return false;
+    if (ev.eventType === "workingLocation") return false;
     const props = ev.extendedProperties?.private;
     return !props?.workHoursExtension;
   });

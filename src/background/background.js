@@ -67,44 +67,54 @@ async function handleWeeklyUpdate() {
   today.setHours(0, 0, 0, 0);
 
   const writeDays = getWriteTargetDays(weekDays, today);
+  console.log("[gwt] handleWeeklyUpdate start", { isWeekend, writeDays: writeDays.map(toDateString) });
 
   let token;
   try {
     token = await getAuthToken();
+    console.log("[gwt] auth ok");
   } catch (err) {
+    console.error("[gwt] auth failed", err);
     throw Object.assign(new Error(ERR_AUTH_REQUIRED), { cause: err });
   }
 
   const { timeMin, timeMax } = weekTimeRange(weekDays);
+  console.log("[gwt] fetching events", { timeMin, timeMax });
 
   let allEvents;
   try {
     allEvents = await fetchEvents(token, timeMin, timeMax);
+    console.log("[gwt] fetched events count:", allEvents.length);
   } catch (err) {
+    console.error("[gwt] fetchEvents failed", err);
     throw Object.assign(new Error(ERR_API_ERROR), { cause: err });
   }
 
   const eventsByDate = groupEventsByDate(allEvents);
   const workingHours = await getWorkingHours();
+  console.log("[gwt] workingHours:", workingHours);
 
   const cacheResult = {};
 
   for (const day of writeDays) {
     const dateStr = toDateString(day);
     const dayEvents = eventsByDate[dateStr] || [];
+    console.log(`[gwt] processing ${dateStr}, events:`, dayEvents.length);
 
     const { timeMin: dMin, timeMax: dMax } = dayTimeRange(dateStr);
     let extEvents;
     try {
       extEvents = await listExtensionEvents(token, dMin, dMax);
-    } catch {
+      console.log(`[gwt] ${dateStr} extEvents:`, extEvents.length);
+    } catch (err) {
+      console.warn(`[gwt] ${dateStr} listExtensionEvents failed`, err);
       extEvents = [];
     }
 
     const hasHoliday = hasNonExtensionAllDayEvent(dayEvents);
+    console.log(`[gwt] ${dateStr} hasHoliday:`, hasHoliday);
 
     if (hasHoliday) {
-      // スキップ日: 既存の拡張イベントがあれば削除
       for (const ev of extEvents) {
         await deleteEvent(token, ev.id).catch(() => {});
       }
@@ -118,16 +128,24 @@ async function handleWeeklyUpdate() {
     const rawMinutes = calcWorkableMinutes(dayEvents, workStart, workEnd);
     const workableMinutes = floorToFiveMinutes(rawMinutes);
     const title = `🧑‍💻 作業可能 ${formatWorkable(workableMinutes)}`;
+    console.log(`[gwt] ${dateStr} workable: ${workableMinutes}min, title: ${title}`);
 
-    if (extEvents.length === 0) {
-      await createEvent(token, dateStr, title).catch(() => {});
-    } else if (extEvents.length === 1) {
-      await updateEvent(token, extEvents[0].id, dateStr, title).catch(() => {});
-    } else {
-      await updateEvent(token, extEvents[0].id, dateStr, title).catch(() => {});
-      for (const ev of extEvents.slice(1)) {
-        await deleteEvent(token, ev.id).catch(() => {});
+    try {
+      if (extEvents.length === 0) {
+        await createEvent(token, dateStr, title);
+        console.log(`[gwt] ${dateStr} created`);
+      } else if (extEvents.length === 1) {
+        await updateEvent(token, extEvents[0].id, dateStr, title);
+        console.log(`[gwt] ${dateStr} updated`);
+      } else {
+        await updateEvent(token, extEvents[0].id, dateStr, title);
+        for (const ev of extEvents.slice(1)) {
+          await deleteEvent(token, ev.id).catch(() => {});
+        }
+        console.log(`[gwt] ${dateStr} updated + deleted duplicates`);
       }
+    } catch (err) {
+      console.error(`[gwt] ${dateStr} write failed`, err);
     }
 
     cacheResult[dateStr] = { workableMinutes, skipped: false };
@@ -142,6 +160,7 @@ async function handleWeeklyUpdate() {
     },
   });
 
+  console.log("[gwt] handleWeeklyUpdate done", cacheResult);
   return { ok: true };
 }
 
