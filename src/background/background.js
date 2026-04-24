@@ -3,6 +3,7 @@ import {
   DEFAULT_WEEK_START_DAY,
   STORAGE_KEY_WORKING_HOURS,
   STORAGE_KEY_WEEK_START_DAY,
+  STORAGE_KEY_EXCLUDE_KEYWORDS,
   STORAGE_KEY_CACHE,
   MSG_TRIGGER_WEEKLY_UPDATE,
   MSG_GET_TODAY_REMAINING,
@@ -64,6 +65,13 @@ async function getWeekStartDay() {
   return DEFAULT_WEEK_START_DAY;
 }
 
+async function getExcludeKeywords() {
+  const data = await chrome.storage.sync.get(STORAGE_KEY_EXCLUDE_KEYWORDS);
+  const raw = data[STORAGE_KEY_EXCLUDE_KEYWORDS];
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((kw) => typeof kw === "string" && kw.trim() !== "");
+}
+
 function isValidWorkingHours(wh) {
   if (!wh?.start || !wh?.end) return false;
   const [sh, sm] = wh.start.split(":").map(Number);
@@ -104,6 +112,7 @@ async function handleWeeklyUpdate() {
 
   const eventsByDate = groupEventsByDate(allEvents);
   const workingHours = await getWorkingHours();
+  const excludeKeywords = await getExcludeKeywords();
   console.log("[gwt] workingHours:", workingHours);
 
   const cacheResult = {};
@@ -137,7 +146,7 @@ async function handleWeeklyUpdate() {
     const workStart = parseLocalTime(workingHours.start, day);
     const workEnd = parseLocalTime(workingHours.end, day);
 
-    const rawMinutes = calcWorkableMinutes(dayEvents, workStart, workEnd);
+    const rawMinutes = calcWorkableMinutes(dayEvents, workStart, workEnd, excludeKeywords);
     const workableMinutes = floorToFiveMinutes(rawMinutes);
     const title = `🧑‍💻 作業可能 ${formatWorkable(workableMinutes)}`;
     console.log(`[gwt] ${dateStr} workable: ${workableMinutes}min, title: ${title}`);
@@ -219,7 +228,8 @@ async function handleGetTodayRemaining() {
     return { ok: true, isHoliday: true, minutes: 0, fromCache: false };
   }
 
-  const rawMinutes = calcRemainingWorkable(events, workStart, workEnd, now);
+  const excludeKeywords = await getExcludeKeywords();
+  const rawMinutes = calcRemainingWorkable(events, workStart, workEnd, now, excludeKeywords);
   const minutes = floorToFiveMinutes(rawMinutes);
 
   return { ok: true, minutes, isWeekend: false, isHoliday: false, isAfterWork: false, fromCache: false };

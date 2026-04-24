@@ -1,5 +1,6 @@
 const STORAGE_KEY = "workingHours";
 const STORAGE_KEY_WEEK_START_DAY = "weekStartDay";
+const STORAGE_KEY_EXCLUDE_KEYWORDS = "excludeKeywords";
 const DEFAULT = { start: "10:00", end: "19:00" };
 const DEFAULT_WEEK_START_DAY = 1;
 
@@ -8,16 +9,20 @@ document.addEventListener("DOMContentLoaded", () => {
   const weekStartDaySelect = document.getElementById("week-start-day");
   const startInput = document.getElementById("start");
   const endInput = document.getElementById("end");
+  const excludeKeywordsTextarea = document.getElementById("exclude-keywords");
   const validationError = document.getElementById("validation-error");
   const statusMsg = document.getElementById("status-msg");
 
-  chrome.storage.sync.get([STORAGE_KEY, STORAGE_KEY_WEEK_START_DAY], (data) => {
+  chrome.storage.sync.get([STORAGE_KEY, STORAGE_KEY_WEEK_START_DAY, STORAGE_KEY_EXCLUDE_KEYWORDS], (data) => {
     const wh = data[STORAGE_KEY] || DEFAULT;
     startInput.value = wh.start;
     endInput.value = wh.end;
 
     const wsd = data[STORAGE_KEY_WEEK_START_DAY] ?? DEFAULT_WEEK_START_DAY;
     weekStartDaySelect.value = String(wsd);
+
+    const keywords = data[STORAGE_KEY_EXCLUDE_KEYWORDS] || [];
+    excludeKeywordsTextarea.value = keywords.join("\n");
   });
 
   form.addEventListener("submit", (e) => {
@@ -34,8 +39,17 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const weekStartDay = Number(weekStartDaySelect.value);
+    const excludeKeywords = excludeKeywordsTextarea.value
+      .split("\n")
+      .map((kw) => kw.trim())
+      .filter((kw) => kw !== "");
+
     chrome.storage.sync.set(
-      { [STORAGE_KEY]: { start, end }, [STORAGE_KEY_WEEK_START_DAY]: weekStartDay },
+      {
+        [STORAGE_KEY]: { start, end },
+        [STORAGE_KEY_WEEK_START_DAY]: weekStartDay,
+        [STORAGE_KEY_EXCLUDE_KEYWORDS]: excludeKeywords,
+      },
       () => {
         statusMsg.textContent = "保存しました。次回ロード時に反映されます。";
         statusMsg.hidden = false;

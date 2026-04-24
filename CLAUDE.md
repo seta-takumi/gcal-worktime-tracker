@@ -32,13 +32,15 @@ background.js（Service Worker）
 ### 計算ロジック（`src/shared/timeUtils.js`）
 
 - `getTargetWeek(date)`: 月〜金は今週、土日は翌週の月〜金を返す
-- `calcWorkableMinutes(events, workStart, workEnd)`: `mergeIntervals` で重複をマージしてから差し引く
+- `calcWorkableMinutes(events, workStart, workEnd, excludeKeywords)`: `mergeIntervals` で重複をマージしてから差し引く。`excludeKeywords` を含む予定は除外（差し引かない）
 - `isSelfAccepted(ev)`: `attendees` に自分（`self: true`）がいて `responseStatus !== "accepted"` なら除外。参加者なし予定は常に対象
 - `hasNonExtensionAllDayEvent(events)`: `transparent` / `workingLocation` な終日イベントはスキップ判定から除外
 
 ### ストレージ
 
 - `chrome.storage.sync` キー `workingHours`: `{ start: "HH:mm", end: "HH:mm" }`
+- `chrome.storage.sync` キー `weekStartDay`: 集計開始曜日（0〜6 の整数）
+- `chrome.storage.sync` キー `excludeKeywords`: 除外ワードの配列（`string[]`）。タイトルへの部分一致で計算から除外
 - `chrome.storage.local` キー `weekCache`: API エラー時のフォールバック用キャッシュ
 
 ### 拡張機能作成イベントの識別

@@ -28,6 +28,11 @@
         <label for="end">終了時刻</label>
         <input type="time" id="end" name="end" value="19:00" required>
       </div>
+      <div class="form-group form-group--block">
+        <label for="exclude-keywords">除外ワード（1行1ワード）</label>
+        <textarea id="exclude-keywords" name="excludeKeywords" rows="4" placeholder="例: 1on1&#10;雑談"></textarea>
+        <div class="hint">タイトルにこのワードを含む予定は計算から除外されます。</div>
+      </div>
       <div id="validation-error" class="error-msg" hidden>
         開始時刻は終了時刻より前に設定してください。
       </div>

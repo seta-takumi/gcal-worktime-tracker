@@ -96,12 +96,13 @@ export function mergeIntervals(intervals) {
  * @param {Array} events Google Calendar イベントオブジェクトの配列（1日分）
  * @param {Date} workStart 就業開始 Date
  * @param {Date} workEnd 就業終了 Date
+ * @param {string[]} [excludeKeywords] タイトルに含まれる場合に除外するキーワード
  * @returns {number} 作業可能分数（0以上）
  */
-export function calcWorkableMinutes(events, workStart, workEnd) {
+export function calcWorkableMinutes(events, workStart, workEnd, excludeKeywords = []) {
   const workDurationMs = workEnd - workStart;
 
-  const busyIntervals = buildBusyIntervals(events, workStart, workEnd);
+  const busyIntervals = buildBusyIntervals(events, workStart, workEnd, excludeKeywords);
   const merged = mergeIntervals(busyIntervals);
 
   const busyMs = merged.reduce((sum, iv) => sum + (iv.end - iv.start), 0);
@@ -112,12 +113,13 @@ export function calcWorkableMinutes(events, workStart, workEnd) {
 /**
  * 就業時間帯内の busy 区間を構築する。
  */
-function buildBusyIntervals(events, workStart, workEnd) {
+function buildBusyIntervals(events, workStart, workEnd, excludeKeywords = []) {
   const intervals = [];
   for (const ev of events) {
     if (isAllDayEvent(ev)) continue;
     const title = (ev.summary || "").toLowerCase();
     const isLunch = title.includes(LUNCH_KEYWORD);
+    if (excludeKeywords.some((kw) => title.includes(kw.toLowerCase()))) continue;
     // lunch は transparent でも差し引く（休憩扱い）
     if (ev.transparency === "transparent" && !isLunch) continue;
     // 「参加」していない会議は差し引かない（lunch は参加判定をスキップ）
@@ -193,12 +195,13 @@ export function formatWorkable(minutes) {
  * @param {Date} workStart
  * @param {Date} workEnd
  * @param {Date} now 現在時刻
+ * @param {string[]} [excludeKeywords] タイトルに含まれる場合に除外するキーワード
  * @returns {number} 残り作業可能分数
  */
-export function calcRemainingWorkable(events, workStart, workEnd, now) {
+export function calcRemainingWorkable(events, workStart, workEnd, now, excludeKeywords = []) {
   if (now >= workEnd) return 0;
   const effectiveStart = now < workStart ? workStart : now;
-  const busyIntervals = buildBusyIntervals(events, effectiveStart, workEnd);
+  const busyIntervals = buildBusyIntervals(events, effectiveStart, workEnd, excludeKeywords);
   const merged = mergeIntervals(busyIntervals);
   const busyMs = merged.reduce((sum, iv) => sum + (iv.end - iv.start), 0);
   const remainMs = Math.max(0, (workEnd - effectiveStart) - busyMs);
