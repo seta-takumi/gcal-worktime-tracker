@@ -1,6 +1,8 @@
 import {
   DEFAULT_WORKING_HOURS,
+  DEFAULT_WEEK_START_DAY,
   STORAGE_KEY_WORKING_HOURS,
+  STORAGE_KEY_WEEK_START_DAY,
   STORAGE_KEY_CACHE,
   MSG_TRIGGER_WEEKLY_UPDATE,
   MSG_GET_TODAY_REMAINING,
@@ -10,6 +12,7 @@ import {
 } from "../shared/constants.js";
 import {
   getTargetWeek,
+  getWorkDayNumbers,
   getWriteTargetDays,
   parseLocalTime,
   calcWorkableMinutes,
@@ -53,6 +56,14 @@ async function getWorkingHours() {
   return wh;
 }
 
+async function getWeekStartDay() {
+  const data = await chrome.storage.sync.get(STORAGE_KEY_WEEK_START_DAY);
+  const val = data[STORAGE_KEY_WEEK_START_DAY];
+  const parsed = Number(val);
+  if (Number.isInteger(parsed) && parsed >= 0 && parsed <= 6) return parsed;
+  return DEFAULT_WEEK_START_DAY;
+}
+
 function isValidWorkingHours(wh) {
   if (!wh?.start || !wh?.end) return false;
   const [sh, sm] = wh.start.split(":").map(Number);
@@ -62,7 +73,8 @@ function isValidWorkingHours(wh) {
 
 async function handleWeeklyUpdate() {
   const now = new Date();
-  const { isWeekend, weekDays } = getTargetWeek(now);
+  const weekStartDay = await getWeekStartDay();
+  const { isWeekend, weekDays } = getTargetWeek(now, weekStartDay);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -167,9 +179,11 @@ async function handleWeeklyUpdate() {
 async function handleGetTodayRemaining() {
   const now = new Date();
   const dayOfWeek = now.getDay();
-  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+  const weekStartDay = await getWeekStartDay();
+  const workDayNumbers = getWorkDayNumbers(weekStartDay);
+  const isNonWorkDay = !workDayNumbers.includes(dayOfWeek);
 
-  if (isWeekend) {
+  if (isNonWorkDay) {
     return { ok: true, isWeekend: true, minutes: 0, fromCache: false };
   }
 

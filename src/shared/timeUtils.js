@@ -1,35 +1,55 @@
 import { LUNCH_KEYWORD, ROUND_MINUTES } from "./constants.js";
 
 /**
- * 指定日が属する対象週（月〜金）の Date 配列を返す。
- * 土日の場合は翌週の月〜金を返す。
+ * 週開始曜日から7日間のうち土日以外の曜日番号配列を返す。
+ * 例: weekStartDay=3（水）→ [3,4,5,1,2]（水木金月火）
  */
-export function getTargetWeek(date) {
-  const day = date.getDay(); // 0=日, 1=月, ..., 6=土
-  const isWeekend = day === 0 || day === 6;
-
-  const monday = new Date(date);
-  if (day === 0) {
-    // 日曜: 翌日が月曜
-    monday.setDate(date.getDate() + 1);
-  } else if (day === 6) {
-    // 土曜: +2日が月曜
-    monday.setDate(date.getDate() + 2);
-  } else {
-    // 平日: 今週の月曜
-    monday.setDate(date.getDate() - (day - 1));
+export function getWorkDayNumbers(weekStartDay = 1) {
+  const result = [];
+  for (let i = 0; i < 7; i++) {
+    const dow = (weekStartDay + i) % 7;
+    if (dow !== 0 && dow !== 6) result.push(dow);
   }
-  monday.setHours(0, 0, 0, 0);
-
-  return { isWeekend, weekDays: buildWeekDays(monday) };
+  return result;
 }
 
-function buildWeekDays(monday) {
-  return Array.from({ length: 5 }, (_, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    return d;
-  });
+/**
+ * 指定日が属する対象週の Date 配列を返す。
+ * 週の開始曜日は weekStartDay で指定（デフォルト: 1=月曜）。
+ * 対象日は週開始曜日から7日間のうち土日以外の5日間。
+ * 今週の残り対象日がなければ翌週を返す。
+ */
+export function getTargetWeek(date, weekStartDay = 1) {
+  const today = new Date(date);
+  today.setHours(0, 0, 0, 0);
+
+  const dayOfWeek = today.getDay();
+  const daysBack = (dayOfWeek - weekStartDay + 7) % 7;
+  const thisWeekStart = new Date(today);
+  thisWeekStart.setDate(today.getDate() - daysBack);
+
+  const thisWeekDays = buildWorkWeekDays(thisWeekStart);
+  const remainingThisWeek = thisWeekDays.filter((d) => d >= today);
+
+  if (remainingThisWeek.length > 0) {
+    const isNonWorkDay = !thisWeekDays.some((d) => d.getTime() === today.getTime());
+    return { isWeekend: isNonWorkDay, weekDays: thisWeekDays };
+  }
+
+  const nextWeekStart = new Date(thisWeekStart);
+  nextWeekStart.setDate(thisWeekStart.getDate() + 7);
+  return { isWeekend: true, weekDays: buildWorkWeekDays(nextWeekStart) };
+}
+
+function buildWorkWeekDays(weekStart) {
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(weekStart);
+    d.setDate(weekStart.getDate() + i);
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6) days.push(d);
+  }
+  return days;
 }
 
 /**
@@ -206,11 +226,11 @@ export function dayTimeRange(dateStr) {
 }
 
 /**
- * 対象週の timeMin（月曜 00:00）と timeMax（金曜 23:59）を生成する。
+ * 対象週の timeMin（週初日 00:00）と timeMax（週末日 23:59）を生成する。
  */
 export function weekTimeRange(weekDays) {
   const monday = weekDays[0];
-  const friday = weekDays[4];
+  const friday = weekDays[weekDays.length - 1];
   const timeMin = new Date(monday);
   timeMin.setHours(0, 0, 0, 0);
   const timeMax = new Date(friday);
