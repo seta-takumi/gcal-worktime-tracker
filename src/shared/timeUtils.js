@@ -14,6 +14,32 @@ export function getWorkDayNumbers(weekStartDay = 1) {
 }
 
 /**
+ * 指定日が属する週の開始日（weekStartDay 曜日）を返す。
+ */
+export function getWeekStart(date, weekStartDay = 1) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  const daysBack = (d.getDay() - weekStartDay + 7) % 7;
+  d.setDate(d.getDate() - daysBack);
+  return d;
+}
+
+/**
+ * 指定日が属する週から count 週分の weekDays 配列を返す。
+ * 各要素は buildWorkWeekDays が返す平日 Date 配列。
+ */
+export function getMultiWeekDays(date, weekStartDay = 1, count = 1) {
+  const weekStart = getWeekStart(date, weekStartDay);
+  const weeks = [];
+  for (let i = 0; i < count; i++) {
+    const start = new Date(weekStart);
+    start.setDate(weekStart.getDate() + i * 7);
+    weeks.push(buildWorkWeekDays(start));
+  }
+  return weeks;
+}
+
+/**
  * 指定日が属する対象週の Date 配列を返す。
  * 週の開始曜日は weekStartDay で指定（デフォルト: 1=月曜）。
  * 対象日は週開始曜日から7日間のうち土日以外の5日間。

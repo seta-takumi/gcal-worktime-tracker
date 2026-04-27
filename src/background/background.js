@@ -1,8 +1,10 @@
 import {
   DEFAULT_WORKING_HOURS,
   DEFAULT_WEEK_START_DAY,
+  DEFAULT_WEEK_COUNT,
   STORAGE_KEY_WORKING_HOURS,
   STORAGE_KEY_WEEK_START_DAY,
+  STORAGE_KEY_WEEK_COUNT,
   STORAGE_KEY_EXCLUDE_KEYWORDS,
   STORAGE_KEY_CACHE,
   MSG_TRIGGER_WEEKLY_UPDATE,
@@ -13,6 +15,7 @@ import {
 } from "../shared/constants.js";
 import {
   getTargetWeek,
+  getMultiWeekDays,
   getWorkDayNumbers,
   getWriteTargetDays,
   parseLocalTime,
@@ -65,6 +68,14 @@ async function getWeekStartDay() {
   return DEFAULT_WEEK_START_DAY;
 }
 
+async function getWeekCount() {
+  const data = await chrome.storage.sync.get(STORAGE_KEY_WEEK_COUNT);
+  const val = data[STORAGE_KEY_WEEK_COUNT];
+  const parsed = Number(val);
+  if (Number.isInteger(parsed) && parsed >= 1 && parsed <= 4) return parsed;
+  return DEFAULT_WEEK_COUNT;
+}
+
 async function getExcludeKeywords() {
   const data = await chrome.storage.sync.get(STORAGE_KEY_EXCLUDE_KEYWORDS);
   const raw = data[STORAGE_KEY_EXCLUDE_KEYWORDS];
@@ -82,12 +93,12 @@ function isValidWorkingHours(wh) {
 async function handleWeeklyUpdate() {
   const now = new Date();
   const weekStartDay = await getWeekStartDay();
-  const { isWeekend, weekDays } = getTargetWeek(now, weekStartDay);
+  const weekCount = await getWeekCount();
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const writeDays = getWriteTargetDays(weekDays, today);
-  console.log("[gwt] handleWeeklyUpdate start", { isWeekend, writeDays: writeDays.map(toDateString) });
+  const allWeeks = getMultiWeekDays(now, weekStartDay, weekCount);
+  console.log("[gwt] handleWeeklyUpdate start", { weekCount, weeks: allWeeks.map((w) => w.map(toDateString)) });
 
   let token;
   try {
@@ -98,84 +109,92 @@ async function handleWeeklyUpdate() {
     throw Object.assign(new Error(ERR_AUTH_REQUIRED), { cause: err });
   }
 
-  const { timeMin, timeMax } = weekTimeRange(weekDays);
-  console.log("[gwt] fetching events", { timeMin, timeMax });
-
-  let allEvents;
-  try {
-    allEvents = await fetchEvents(token, timeMin, timeMax);
-    console.log("[gwt] fetched events count:", allEvents.length);
-  } catch (err) {
-    console.error("[gwt] fetchEvents failed", err);
-    throw Object.assign(new Error(ERR_API_ERROR), { cause: err });
-  }
-
-  const eventsByDate = groupEventsByDate(allEvents);
   const workingHours = await getWorkingHours();
   const excludeKeywords = await getExcludeKeywords();
   console.log("[gwt] workingHours:", workingHours);
 
   const cacheResult = {};
 
-  for (const day of writeDays) {
-    const dateStr = toDateString(day);
-    const dayEvents = eventsByDate[dateStr] || [];
-    console.log(`[gwt] processing ${dateStr}, events:`, dayEvents.length);
+  for (const [weekIndex, weekDays] of allWeeks.entries()) {
+    const isFirstWeek = weekIndex === 0;
+    const writeDays = isFirstWeek ? getWriteTargetDays(weekDays, today) : weekDays;
 
-    const { timeMin: dMin, timeMax: dMax } = dayTimeRange(dateStr);
-    let extEvents;
+    if (writeDays.length === 0) continue;
+
+    const { timeMin, timeMax } = weekTimeRange(weekDays);
+    console.log("[gwt] fetching events for week", weekIndex, { timeMin, timeMax });
+
+    let allEvents;
     try {
-      extEvents = await listExtensionEvents(token, dMin, dMax);
-      console.log(`[gwt] ${dateStr} extEvents:`, extEvents.length);
+      allEvents = await fetchEvents(token, timeMin, timeMax);
+      console.log("[gwt] week", weekIndex, "fetched events count:", allEvents.length);
     } catch (err) {
-      console.warn(`[gwt] ${dateStr} listExtensionEvents failed`, err);
-      extEvents = [];
+      console.error("[gwt] week", weekIndex, "fetchEvents failed", err);
+      throw Object.assign(new Error(ERR_API_ERROR), { cause: err });
     }
 
-    const hasHoliday = hasNonExtensionAllDayEvent(dayEvents);
-    console.log(`[gwt] ${dateStr} hasHoliday:`, hasHoliday);
+    const eventsByDate = groupEventsByDate(allEvents);
 
-    if (hasHoliday) {
-      for (const ev of extEvents) {
-        await deleteEvent(token, ev.id).catch(() => {});
+    for (const day of writeDays) {
+      const dateStr = toDateString(day);
+      const dayEvents = eventsByDate[dateStr] || [];
+      console.log(`[gwt] processing ${dateStr}, events:`, dayEvents.length);
+
+      const { timeMin: dMin, timeMax: dMax } = dayTimeRange(dateStr);
+      let extEvents;
+      try {
+        extEvents = await listExtensionEvents(token, dMin, dMax);
+        console.log(`[gwt] ${dateStr} extEvents:`, extEvents.length);
+      } catch (err) {
+        console.warn(`[gwt] ${dateStr} listExtensionEvents failed`, err);
+        extEvents = [];
       }
-      cacheResult[dateStr] = { workableMinutes: 0, skipped: true };
-      continue;
-    }
 
-    const workStart = parseLocalTime(workingHours.start, day);
-    const workEnd = parseLocalTime(workingHours.end, day);
+      const hasHoliday = hasNonExtensionAllDayEvent(dayEvents);
+      console.log(`[gwt] ${dateStr} hasHoliday:`, hasHoliday);
 
-    const rawMinutes = calcWorkableMinutes(dayEvents, workStart, workEnd, excludeKeywords);
-    const workableMinutes = floorToFiveMinutes(rawMinutes);
-    const title = `🧑‍💻 作業可能 ${formatWorkable(workableMinutes)}`;
-    console.log(`[gwt] ${dateStr} workable: ${workableMinutes}min, title: ${title}`);
-
-    try {
-      if (extEvents.length === 0) {
-        await createEvent(token, dateStr, title);
-        console.log(`[gwt] ${dateStr} created`);
-      } else if (extEvents.length === 1) {
-        await updateEvent(token, extEvents[0].id, dateStr, title);
-        console.log(`[gwt] ${dateStr} updated`);
-      } else {
-        await updateEvent(token, extEvents[0].id, dateStr, title);
-        for (const ev of extEvents.slice(1)) {
+      if (hasHoliday) {
+        for (const ev of extEvents) {
           await deleteEvent(token, ev.id).catch(() => {});
         }
-        console.log(`[gwt] ${dateStr} updated + deleted duplicates`);
+        cacheResult[dateStr] = { workableMinutes: 0, skipped: true };
+        continue;
       }
-    } catch (err) {
-      console.error(`[gwt] ${dateStr} write failed`, err);
-    }
 
-    cacheResult[dateStr] = { workableMinutes, skipped: false };
+      const workStart = parseLocalTime(workingHours.start, day);
+      const workEnd = parseLocalTime(workingHours.end, day);
+
+      const rawMinutes = calcWorkableMinutes(dayEvents, workStart, workEnd, excludeKeywords);
+      const workableMinutes = floorToFiveMinutes(rawMinutes);
+      const title = `🧑‍💻 作業可能 ${formatWorkable(workableMinutes)}`;
+      console.log(`[gwt] ${dateStr} workable: ${workableMinutes}min, title: ${title}`);
+
+      try {
+        if (extEvents.length === 0) {
+          await createEvent(token, dateStr, title);
+          console.log(`[gwt] ${dateStr} created`);
+        } else if (extEvents.length === 1) {
+          await updateEvent(token, extEvents[0].id, dateStr, title);
+          console.log(`[gwt] ${dateStr} updated`);
+        } else {
+          await updateEvent(token, extEvents[0].id, dateStr, title);
+          for (const ev of extEvents.slice(1)) {
+            await deleteEvent(token, ev.id).catch(() => {});
+          }
+          console.log(`[gwt] ${dateStr} updated + deleted duplicates`);
+        }
+      } catch (err) {
+        console.error(`[gwt] ${dateStr} write failed`, err);
+      }
+
+      cacheResult[dateStr] = { workableMinutes, skipped: false };
+    }
   }
 
-  const weekKey = toDateString(weekDays[0]);
+  const firstWeekKey = toDateString(allWeeks[0][0]);
   await chrome.storage.local.set({
     [STORAGE_KEY_CACHE]: {
-      weekKey,
+      weekKey: firstWeekKey,
       updatedAt: Date.now(),
       days: cacheResult,
     },

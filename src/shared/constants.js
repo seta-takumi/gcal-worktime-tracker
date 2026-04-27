@@ -5,10 +5,12 @@ export const WORK_HOURS_EXTENSION_VALUE = "v1";
 
 export const STORAGE_KEY_WORKING_HOURS = "workingHours";
 export const STORAGE_KEY_WEEK_START_DAY = "weekStartDay";
+export const STORAGE_KEY_WEEK_COUNT = "weekCount";
 export const STORAGE_KEY_EXCLUDE_KEYWORDS = "excludeKeywords";
 export const STORAGE_KEY_CACHE = "weekCache";
 
 export const DEFAULT_WEEK_START_DAY = 1; // 1=月曜
+export const DEFAULT_WEEK_COUNT = 1;
 
 export const LUNCH_KEYWORD = "lunch";
 export const ROUND_MINUTES = 5;
