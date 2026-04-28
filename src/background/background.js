@@ -22,6 +22,7 @@ import {
   calcWorkableMinutes,
   calcRemainingWorkable,
   hasNonExtensionAllDayEvent,
+  hasOooOnDate,
   floorToFiveMinutes,
   formatWorkable,
   toDateString,
@@ -150,7 +151,7 @@ async function handleWeeklyUpdate() {
         extEvents = [];
       }
 
-      const hasHoliday = hasNonExtensionAllDayEvent(dayEvents);
+      const hasHoliday = hasNonExtensionAllDayEvent(dayEvents) || hasOooOnDate(allEvents, dateStr);
       console.log(`[gwt] ${dateStr} hasHoliday:`, hasHoliday);
 
       if (hasHoliday) {
@@ -242,7 +243,7 @@ async function handleGetTodayRemaining() {
     return await getCachedTodayResult(now, isNetwork ? ERR_NETWORK_ERROR : ERR_API_ERROR);
   }
 
-  const isHoliday = hasNonExtensionAllDayEvent(events);
+  const isHoliday = hasNonExtensionAllDayEvent(events) || hasOooOnDate(events, dateStr);
   if (isHoliday) {
     return { ok: true, isHoliday: true, minutes: 0, fromCache: false };
   }

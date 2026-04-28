@@ -183,16 +183,35 @@ function isAllDayEvent(ev) {
 }
 
 /**
- * その日のイベント一覧に終日予定（祝日・OOO 等）が含まれるか判定する。
- * 拡張機能が作成した終日予定は除外する。
+ * その日のイベント一覧に終日予定（祝日等）が含まれるか判定する。
+ * OOO は hasOooOnDate で別途判定するためここでは除外する。
+ * 拡張機能が作成した終日予定も除外する。
  */
 export function hasNonExtensionAllDayEvent(events) {
   return events.some((ev) => {
     if (!isAllDayEvent(ev)) return false;
     if (ev.transparency === "transparent") return false;
     if (ev.eventType === "workingLocation") return false;
+    if (ev.eventType === "outOfOffice") return false;
     const props = ev.extendedProperties?.private;
     return !props?.workHoursExtension;
+  });
+}
+
+/**
+ * イベント一覧に指定日 (YYYY-MM-DD) をカバーする不在 (OOO) イベントがあるか判定する。
+ * 複数日にまたがる OOO や dateTime 形式の OOO に対応するため期間で判定する。
+ * date 形式・dateTime 形式ともに end は排他的（翌日 00:00）として扱う。
+ */
+export function hasOooOnDate(allEvents, dateStr) {
+  return allEvents.some((ev) => {
+    if (ev.eventType !== "outOfOffice") return false;
+    if (ev.start.date) {
+      return ev.start.date <= dateStr && dateStr < ev.end.date;
+    }
+    const startDateStr = toDateString(new Date(ev.start.dateTime));
+    const endDateStr = toDateString(new Date(ev.end.dateTime));
+    return startDateStr <= dateStr && dateStr < endDateStr;
   });
 }
 
