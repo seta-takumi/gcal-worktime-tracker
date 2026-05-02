@@ -12,9 +12,8 @@ import {
   ERR_AUTH_REQUIRED,
   ERR_API_ERROR,
   ERR_NETWORK_ERROR,
-} from "../shared/constants.js";
+} from "../shared/constants";
 import {
-  getTargetWeek,
   getMultiWeekDays,
   getWorkDayNumbers,
   getWriteTargetDays,
@@ -29,7 +28,7 @@ import {
   weekTimeRange,
   dayTimeRange,
   groupEventsByDate,
-} from "../shared/timeUtils.js";
+} from "../shared/timeUtils";
 import {
   getAuthToken,
   fetchEvents,
@@ -37,61 +36,60 @@ import {
   createEvent,
   updateEvent,
   deleteEvent,
-} from "../shared/calendarApi.js";
+} from "../shared/calendarApi";
+import type { WorkingHours, WeekCache, TodayRemainingResponse, WeeklyUpdateResponse } from "../shared/types";
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === MSG_TRIGGER_WEEKLY_UPDATE) {
-    handleWeeklyUpdate().then(sendResponse).catch((err) => {
+    handleWeeklyUpdate().then(sendResponse).catch((err: Error) => {
       sendResponse({ ok: false, error: err.message });
     });
     return true;
   }
   if (msg.type === MSG_GET_TODAY_REMAINING) {
-    handleGetTodayRemaining().then(sendResponse).catch((err) => {
+    handleGetTodayRemaining().then(sendResponse).catch((err: Error) => {
       sendResponse({ ok: false, error: err.message });
     });
     return true;
   }
 });
 
-async function getWorkingHours() {
+async function getWorkingHours(): Promise<WorkingHours> {
   const data = await chrome.storage.sync.get(STORAGE_KEY_WORKING_HOURS);
-  const wh = data[STORAGE_KEY_WORKING_HOURS] || DEFAULT_WORKING_HOURS;
-  if (!isValidWorkingHours(wh)) return DEFAULT_WORKING_HOURS;
+  const wh = data[STORAGE_KEY_WORKING_HOURS] as WorkingHours | undefined;
+  if (!wh || !isValidWorkingHours(wh)) return DEFAULT_WORKING_HOURS;
   return wh;
 }
 
-async function getWeekStartDay() {
+async function getWeekStartDay(): Promise<number> {
   const data = await chrome.storage.sync.get(STORAGE_KEY_WEEK_START_DAY);
-  const val = data[STORAGE_KEY_WEEK_START_DAY];
-  const parsed = Number(val);
+  const parsed = Number(data[STORAGE_KEY_WEEK_START_DAY]);
   if (Number.isInteger(parsed) && parsed >= 0 && parsed <= 6) return parsed;
   return DEFAULT_WEEK_START_DAY;
 }
 
-async function getWeekCount() {
+async function getWeekCount(): Promise<number> {
   const data = await chrome.storage.sync.get(STORAGE_KEY_WEEK_COUNT);
-  const val = data[STORAGE_KEY_WEEK_COUNT];
-  const parsed = Number(val);
+  const parsed = Number(data[STORAGE_KEY_WEEK_COUNT]);
   if (Number.isInteger(parsed) && parsed >= 1 && parsed <= 4) return parsed;
   return DEFAULT_WEEK_COUNT;
 }
 
-async function getExcludeKeywords() {
+async function getExcludeKeywords(): Promise<string[]> {
   const data = await chrome.storage.sync.get(STORAGE_KEY_EXCLUDE_KEYWORDS);
   const raw = data[STORAGE_KEY_EXCLUDE_KEYWORDS];
   if (!Array.isArray(raw)) return [];
-  return raw.filter((kw) => typeof kw === "string" && kw.trim() !== "");
+  return (raw as unknown[]).filter((kw): kw is string => typeof kw === "string" && kw.trim() !== "");
 }
 
-function isValidWorkingHours(wh) {
-  if (!wh?.start || !wh?.end) return false;
+function isValidWorkingHours(wh: WorkingHours): boolean {
+  if (!wh.start || !wh.end) return false;
   const [sh, sm] = wh.start.split(":").map(Number);
   const [eh, em] = wh.end.split(":").map(Number);
   return sh * 60 + sm < eh * 60 + em;
 }
 
-async function handleWeeklyUpdate() {
+async function handleWeeklyUpdate(): Promise<WeeklyUpdateResponse> {
   const now = new Date();
   const weekStartDay = await getWeekStartDay();
   const weekCount = await getWeekCount();
@@ -101,7 +99,7 @@ async function handleWeeklyUpdate() {
   const allWeeks = getMultiWeekDays(now, weekStartDay, weekCount);
   console.log("[gwt] handleWeeklyUpdate start", { weekCount, weeks: allWeeks.map((w) => w.map(toDateString)) });
 
-  let token;
+  let token: string;
   try {
     token = await getAuthToken();
     console.log("[gwt] auth ok");
@@ -114,7 +112,7 @@ async function handleWeeklyUpdate() {
   const excludeKeywords = await getExcludeKeywords();
   console.log("[gwt] workingHours:", workingHours);
 
-  const cacheResult = {};
+  const cacheResult: WeekCache["days"] = {};
 
   for (const [weekIndex, weekDays] of allWeeks.entries()) {
     const isFirstWeek = weekIndex === 0;
@@ -138,11 +136,11 @@ async function handleWeeklyUpdate() {
 
     for (const day of writeDays) {
       const dateStr = toDateString(day);
-      const dayEvents = eventsByDate[dateStr] || [];
+      const dayEvents = eventsByDate[dateStr] ?? [];
       console.log(`[gwt] processing ${dateStr}, events:`, dayEvents.length);
 
       const { timeMin: dMin, timeMax: dMax } = dayTimeRange(dateStr);
-      let extEvents;
+      let extEvents: Awaited<ReturnType<typeof listExtensionEvents>>;
       try {
         extEvents = await listExtensionEvents(token, dMin, dMax);
         console.log(`[gwt] ${dateStr} extEvents:`, extEvents.length);
@@ -156,7 +154,7 @@ async function handleWeeklyUpdate() {
 
       if (hasHoliday) {
         for (const ev of extEvents) {
-          await deleteEvent(token, ev.id).catch(() => {});
+          await deleteEvent(token, ev.id!).catch(() => {});
         }
         cacheResult[dateStr] = { workableMinutes: 0, skipped: true };
         continue;
@@ -164,7 +162,6 @@ async function handleWeeklyUpdate() {
 
       const workStart = parseLocalTime(workingHours.start, day);
       const workEnd = parseLocalTime(workingHours.end, day);
-
       const rawMinutes = calcWorkableMinutes(dayEvents, workStart, workEnd, excludeKeywords);
       const workableMinutes = floorToFiveMinutes(rawMinutes);
       const title = `🧑‍💻 作業可能 ${formatWorkable(workableMinutes)}`;
@@ -175,12 +172,12 @@ async function handleWeeklyUpdate() {
           await createEvent(token, dateStr, title);
           console.log(`[gwt] ${dateStr} created`);
         } else if (extEvents.length === 1) {
-          await updateEvent(token, extEvents[0].id, dateStr, title);
+          await updateEvent(token, extEvents[0].id!, dateStr, title);
           console.log(`[gwt] ${dateStr} updated`);
         } else {
-          await updateEvent(token, extEvents[0].id, dateStr, title);
+          await updateEvent(token, extEvents[0].id!, dateStr, title);
           for (const ev of extEvents.slice(1)) {
-            await deleteEvent(token, ev.id).catch(() => {});
+            await deleteEvent(token, ev.id!).catch(() => {});
           }
           console.log(`[gwt] ${dateStr} updated + deleted duplicates`);
         }
@@ -198,14 +195,14 @@ async function handleWeeklyUpdate() {
       weekKey: firstWeekKey,
       updatedAt: Date.now(),
       days: cacheResult,
-    },
+    } satisfies WeekCache,
   });
 
   console.log("[gwt] handleWeeklyUpdate done", cacheResult);
   return { ok: true };
 }
 
-async function handleGetTodayRemaining() {
+async function handleGetTodayRemaining(): Promise<TodayRemainingResponse> {
   const now = new Date();
   const dayOfWeek = now.getDay();
   const weekStartDay = await getWeekStartDay();
@@ -220,16 +217,15 @@ async function handleGetTodayRemaining() {
   const workStart = parseLocalTime(workingHours.start, now);
   const workEnd = parseLocalTime(workingHours.end, now);
 
-  const isAfterWork = now >= workEnd;
-  if (isAfterWork) {
+  if (now >= workEnd) {
     return { ok: true, isAfterWork: true, minutes: 0, fromCache: false };
   }
 
-  let token;
+  let token: string;
   try {
     token = await getAuthToken(false);
   } catch {
-    return await getCachedTodayResult(now, ERR_AUTH_REQUIRED);
+    return getCachedTodayResult(now, ERR_AUTH_REQUIRED);
   }
 
   const dateStr = toDateString(now);
@@ -239,8 +235,8 @@ async function handleGetTodayRemaining() {
   try {
     events = await fetchEvents(token, timeMin, timeMax);
   } catch (err) {
-    const isNetwork = err.message.includes("fetch");
-    return await getCachedTodayResult(now, isNetwork ? ERR_NETWORK_ERROR : ERR_API_ERROR);
+    const isNetwork = (err as Error).message.includes("fetch");
+    return getCachedTodayResult(now, isNetwork ? ERR_NETWORK_ERROR : ERR_API_ERROR);
   }
 
   const isHoliday = hasNonExtensionAllDayEvent(events) || hasOooOnDate(events, dateStr);
@@ -255,9 +251,12 @@ async function handleGetTodayRemaining() {
   return { ok: true, minutes, isWeekend: false, isHoliday: false, isAfterWork: false, fromCache: false };
 }
 
-async function getCachedTodayResult(now, error) {
+async function getCachedTodayResult(
+  now: Date,
+  error: string,
+): Promise<TodayRemainingResponse> {
   const data = await chrome.storage.local.get(STORAGE_KEY_CACHE);
-  const cache = data[STORAGE_KEY_CACHE];
+  const cache = data[STORAGE_KEY_CACHE] as WeekCache | undefined;
   const dateStr = toDateString(now);
 
   if (cache?.days?.[dateStr] !== undefined) {

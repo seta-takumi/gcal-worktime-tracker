@@ -1,0 +1,19 @@
+{
+  "name": "gcal-worktime-tracker",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "bun run build:js && bun run build:copy",
+    "build:js": "bun run build:bg && bun run build:content && bun run build:popup && bun run build:options",
+    "build:bg": "mkdir -p dist/background && bun build src/background/background.ts --outfile dist/background/background.js --format esm --target browser",
+    "build:content": "mkdir -p dist/content && bun build src/content/content.ts --outfile dist/content/content.js --format iife --target browser",
+    "build:popup": "mkdir -p dist/popup && bun build src/popup/popup.ts --outfile dist/popup/popup.js --format iife --target browser",
+    "build:options": "mkdir -p dist/options && bun build src/options/options.ts --outfile dist/options/options.js --format iife --target browser",
+    "build:copy": "cp src/popup/popup.html src/popup/popup.css dist/popup/ && cp src/options/options.html src/options/options.css dist/options/",
+    "typecheck": "tsc --noEmit",
+    "watch": "bun build --watch src/background/background.ts --outfile dist/background/background.js --format esm --target browser"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "typescript": "^5.8.3"
+  }
+}

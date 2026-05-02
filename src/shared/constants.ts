@@ -1,4 +1,4 @@
-export const DEFAULT_WORKING_HOURS = { start: "10:00", end: "19:00" };
+export const DEFAULT_WORKING_HOURS = { start: "10:00", end: "19:00" } as const;
 
 export const WORK_HOURS_EXTENSION_KEY = "workHoursExtension";
 export const WORK_HOURS_EXTENSION_VALUE = "v1";
