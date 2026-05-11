@@ -2,12 +2,9 @@ import { LUNCH_KEYWORD, ROUND_MINUTES } from "./constants";
 import type { CalendarEvent, Interval } from "./types";
 
 export function getWorkDayNumbers(weekStartDay = 1): number[] {
-  const result: number[] = [];
-  for (let i = 0; i < 7; i++) {
-    const dow = (weekStartDay + i) % 7;
-    if (dow !== 0 && dow !== 6) result.push(dow);
-  }
-  return result;
+  return Array.from({ length: 7 }, (_, i) => (weekStartDay + i) % 7).filter(
+    (dow) => dow !== 0 && dow !== 6,
+  );
 }
 
 export function getWeekStart(date: Date, weekStartDay = 1): Date {
@@ -55,14 +52,11 @@ export function getTargetWeek(
 }
 
 function buildWorkWeekDays(weekStart: Date): Date[] {
-  const days: Date[] = [];
-  for (let i = 0; i < 7; i++) {
+  return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(weekStart);
     d.setDate(weekStart.getDate() + i);
-    const dow = d.getDay();
-    if (dow !== 0 && dow !== 6) days.push(d);
-  }
-  return days;
+    return d;
+  }).filter((d) => d.getDay() !== 0 && d.getDay() !== 6);
 }
 
 export function getWriteTargetDays(weekDays: Date[], today: Date): Date[] {
@@ -82,12 +76,12 @@ export function mergeIntervals(intervals: Interval[]): Interval[] {
   if (intervals.length === 0) return [];
   const sorted = [...intervals].sort((a, b) => a.start.getTime() - b.start.getTime());
   const merged: Interval[] = [sorted[0]];
-  for (let i = 1; i < sorted.length; i++) {
-    const last = merged[merged.length - 1];
-    if (sorted[i].start <= last.end) {
-      last.end = new Date(Math.max(last.end.getTime(), sorted[i].end.getTime()));
+  for (const iv of sorted.slice(1)) {
+    const last = merged.at(-1)!;
+    if (iv.start <= last.end) {
+      last.end = new Date(Math.max(last.end.getTime(), iv.end.getTime()));
     } else {
-      merged.push({ start: sorted[i].start, end: sorted[i].end });
+      merged.push({ start: iv.start, end: iv.end });
     }
   }
   return merged;
@@ -219,14 +213,8 @@ export function weekTimeRange(weekDays: Date[]): { timeMin: string; timeMax: str
   return { timeMin: timeMin.toISOString(), timeMax: timeMax.toISOString() };
 }
 
-export function groupEventsByDate(events: CalendarEvent[]): Record<string, CalendarEvent[]> {
-  const map: Record<string, CalendarEvent[]> = {};
-  for (const ev of events) {
-    const dateStr = ev.start.dateTime
-      ? toDateString(new Date(ev.start.dateTime))
-      : ev.start.date!;
-    if (!map[dateStr]) map[dateStr] = [];
-    map[dateStr].push(ev);
-  }
-  return map;
+export function groupEventsByDate(events: CalendarEvent[]): Partial<Record<string, CalendarEvent[]>> {
+  return Object.groupBy(events, (ev) =>
+    ev.start.dateTime ? toDateString(new Date(ev.start.dateTime)) : ev.start.date!,
+  );
 }

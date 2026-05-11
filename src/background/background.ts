@@ -91,8 +91,7 @@ function isValidWorkingHours(wh: WorkingHours): boolean {
 
 async function handleWeeklyUpdate(): Promise<WeeklyUpdateResponse> {
   const now = new Date();
-  const weekStartDay = await getWeekStartDay();
-  const weekCount = await getWeekCount();
+  const [weekStartDay, weekCount] = await Promise.all([getWeekStartDay(), getWeekCount()]);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -108,8 +107,7 @@ async function handleWeeklyUpdate(): Promise<WeeklyUpdateResponse> {
     throw Object.assign(new Error(ERR_AUTH_REQUIRED), { cause: err });
   }
 
-  const workingHours = await getWorkingHours();
-  const excludeKeywords = await getExcludeKeywords();
+  const [workingHours, excludeKeywords] = await Promise.all([getWorkingHours(), getExcludeKeywords()]);
   console.log("[gwt] workingHours:", workingHours);
 
   const cacheResult: WeekCache["days"] = {};
@@ -204,8 +202,13 @@ async function handleWeeklyUpdate(): Promise<WeeklyUpdateResponse> {
 
 async function handleGetTodayRemaining(): Promise<TodayRemainingResponse> {
   const now = new Date();
+  const [weekStartDay, workingHours, excludeKeywords] = await Promise.all([
+    getWeekStartDay(),
+    getWorkingHours(),
+    getExcludeKeywords(),
+  ]);
+
   const dayOfWeek = now.getDay();
-  const weekStartDay = await getWeekStartDay();
   const workDayNumbers = getWorkDayNumbers(weekStartDay);
   const isNonWorkDay = !workDayNumbers.includes(dayOfWeek);
 
@@ -213,7 +216,6 @@ async function handleGetTodayRemaining(): Promise<TodayRemainingResponse> {
     return { ok: true, isWeekend: true, minutes: 0, fromCache: false };
   }
 
-  const workingHours = await getWorkingHours();
   const workStart = parseLocalTime(workingHours.start, now);
   const workEnd = parseLocalTime(workingHours.end, now);
 
@@ -244,7 +246,6 @@ async function handleGetTodayRemaining(): Promise<TodayRemainingResponse> {
     return { ok: true, isHoliday: true, minutes: 0, fromCache: false };
   }
 
-  const excludeKeywords = await getExcludeKeywords();
   const rawMinutes = calcRemainingWorkable(events, workStart, workEnd, now, excludeKeywords);
   const minutes = floorToFiveMinutes(rawMinutes);
 

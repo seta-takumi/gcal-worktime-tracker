@@ -45,7 +45,18 @@ Google カレンダーの予定をもとに、会議や休憩などを除いた 
 }
 ```
 
-### 3. Chrome に拡張機能を読み込む
+### 3. ビルド
+
+[Bun](https://bun.sh/) が必要です。
+
+```bash
+bun install
+bun run build
+```
+
+`dist/` ディレクトリにビルド済みファイルが出力されます。
+
+### 4. Chrome に拡張機能を読み込む
 
 1. `chrome://extensions` を開く
 2. 右上の「デベロッパーモード」を有効化

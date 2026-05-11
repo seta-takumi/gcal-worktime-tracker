@@ -27,14 +27,14 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = 3): P
     try {
       const res = await fetch(url, options);
       if (res.status === 429 || res.status >= 500) {
-        await new Promise((r) => setTimeout(r, Math.pow(2, i) * 1000));
+        await new Promise((r) => setTimeout(r, 2 ** i * 1000));
         lastError = new Error(`HTTP ${res.status}`);
         continue;
       }
       return res;
     } catch (err) {
       lastError = err as Error;
-      await new Promise((r) => setTimeout(r, Math.pow(2, i) * 1000));
+      await new Promise((r) => setTimeout(r, 2 ** i * 1000));
     }
   }
   throw lastError;

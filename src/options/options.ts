@@ -9,7 +9,7 @@ import {
 } from "../shared/constants";
 import type { WorkingHours } from "../shared/types";
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   const form = document.getElementById("options-form") as HTMLFormElement;
   const weekStartDaySelect = document.getElementById("week-start-day") as HTMLSelectElement;
   const weekCountSelect = document.getElementById("week-count") as HTMLSelectElement;
@@ -19,25 +19,27 @@ document.addEventListener("DOMContentLoaded", () => {
   const validationError = document.getElementById("validation-error") as HTMLElement;
   const statusMsg = document.getElementById("status-msg") as HTMLElement;
 
-  chrome.storage.sync.get(
-    [STORAGE_KEY_WORKING_HOURS, STORAGE_KEY_WEEK_START_DAY, STORAGE_KEY_WEEK_COUNT, STORAGE_KEY_EXCLUDE_KEYWORDS],
-    (data) => {
-      const wh = (data[STORAGE_KEY_WORKING_HOURS] as WorkingHours | undefined) ?? DEFAULT_WORKING_HOURS;
-      startInput.value = wh.start;
-      endInput.value = wh.end;
+  const data = await chrome.storage.sync.get([
+    STORAGE_KEY_WORKING_HOURS,
+    STORAGE_KEY_WEEK_START_DAY,
+    STORAGE_KEY_WEEK_COUNT,
+    STORAGE_KEY_EXCLUDE_KEYWORDS,
+  ]);
 
-      const wsd = (data[STORAGE_KEY_WEEK_START_DAY] as number | undefined) ?? DEFAULT_WEEK_START_DAY;
-      weekStartDaySelect.value = String(wsd);
+  const wh = (data[STORAGE_KEY_WORKING_HOURS] as WorkingHours | undefined) ?? DEFAULT_WORKING_HOURS;
+  startInput.value = wh.start;
+  endInput.value = wh.end;
 
-      const wc = (data[STORAGE_KEY_WEEK_COUNT] as number | undefined) ?? DEFAULT_WEEK_COUNT;
-      weekCountSelect.value = String(wc);
+  const wsd = (data[STORAGE_KEY_WEEK_START_DAY] as number | undefined) ?? DEFAULT_WEEK_START_DAY;
+  weekStartDaySelect.value = String(wsd);
 
-      const keywords = (data[STORAGE_KEY_EXCLUDE_KEYWORDS] as string[] | undefined) ?? [];
-      excludeKeywordsTextarea.value = keywords.join("\n");
-    },
-  );
+  const wc = (data[STORAGE_KEY_WEEK_COUNT] as number | undefined) ?? DEFAULT_WEEK_COUNT;
+  weekCountSelect.value = String(wc);
 
-  form.addEventListener("submit", (e) => {
+  const keywords = (data[STORAGE_KEY_EXCLUDE_KEYWORDS] as string[] | undefined) ?? [];
+  excludeKeywordsTextarea.value = keywords.join("\n");
+
+  form.addEventListener("submit", async (e) => {
     e.preventDefault();
     validationError.hidden = true;
     statusMsg.hidden = true;
@@ -57,21 +59,18 @@ document.addEventListener("DOMContentLoaded", () => {
       .map((kw) => kw.trim())
       .filter((kw) => kw !== "");
 
-    chrome.storage.sync.set(
-      {
-        [STORAGE_KEY_WORKING_HOURS]: { start, end },
-        [STORAGE_KEY_WEEK_START_DAY]: weekStartDay,
-        [STORAGE_KEY_WEEK_COUNT]: weekCount,
-        [STORAGE_KEY_EXCLUDE_KEYWORDS]: excludeKeywords,
-      },
-      () => {
-        statusMsg.textContent = "保存しました。次回ロード時に反映されます。";
-        statusMsg.hidden = false;
-        setTimeout(() => {
-          statusMsg.hidden = true;
-        }, 3000);
-      },
-    );
+    await chrome.storage.sync.set({
+      [STORAGE_KEY_WORKING_HOURS]: { start, end },
+      [STORAGE_KEY_WEEK_START_DAY]: weekStartDay,
+      [STORAGE_KEY_WEEK_COUNT]: weekCount,
+      [STORAGE_KEY_EXCLUDE_KEYWORDS]: excludeKeywords,
+    });
+
+    statusMsg.textContent = "保存しました。次回ロード時に反映されます。";
+    statusMsg.hidden = false;
+    setTimeout(() => {
+      statusMsg.hidden = true;
+    }, 3000);
   });
 });
 
